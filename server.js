@@ -6,8 +6,15 @@ const https = require('https');
 const { PassThrough } = require('stream');
 const config = require('./config');
 
-const port = process.env.PORT || 3000; // Railway will set PORT env variable
 const app = express();
+const port = process.env.PORT || 3000;
+
+// Log environment variables (excluding sensitive data)
+console.log('Environment:', {
+    NODE_ENV: process.env.NODE_ENV,
+    PORT: process.env.PORT,
+    IS_PRODUCTION: process.env.NODE_ENV === 'production'
+});
 
 // Create custom axios instance with keep-alive
 const axiosInstance = axios.create({
@@ -123,6 +130,7 @@ app.get('/health', (req, res) => {
         status: 'ok', 
         environment: config.nodeEnv,
         port: port,
+        env_port: process.env.PORT,
         timestamp: new Date().toISOString()
     });
 });
@@ -136,6 +144,11 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(port, '0.0.0.0', () => {
-    console.log(`Server running in ${config.nodeEnv} mode on port ${port}`);
+const server = app.listen(port, '0.0.0.0', () => {
+    console.log(`Server starting with configuration:`, {
+        port: port,
+        env_port: process.env.PORT,
+        node_env: process.env.NODE_ENV,
+        address: server.address()
+    });
 });
