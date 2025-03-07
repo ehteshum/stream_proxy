@@ -9,9 +9,8 @@
         body {
             margin: 0;
             padding: 20px;
-            background: #1a1a1a;
-            color: #fff;
             font-family: Arial, sans-serif;
+            background: #f0f0f0;
         }
         .container {
             max-width: 1200px;
@@ -19,167 +18,153 @@
         }
         .video-container {
             width: 100%;
-            max-width: 1200px;
-            margin: 20px auto;
+            max-width: 960px;
+            margin: 0 auto;
             background: #000;
             border-radius: 8px;
             overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
         video {
             width: 100%;
             height: auto;
             display: block;
         }
-        .controls {
-            padding: 15px;
-            background: #2a2a2a;
-            border-radius: 8px;
-            margin-top: 20px;
-        }
         .status {
-            margin-top: 15px;
-            padding: 10px;
+            margin-top: 20px;
+            padding: 15px;
             border-radius: 4px;
-            background: #333;
+            background: #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
         }
         .error {
-            color: #ff6b6b;
+            background: #fee;
+            color: #c00;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 10px;
+            display: none;
         }
-        .success {
-            color: #69db7c;
+        .info {
+            background: #eff;
+            color: #077;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 10px;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="video-container">
-            <video id="videoPlayer" controls autoplay playsinline></video>
+            <video id="video" controls autoplay></video>
         </div>
-        <div class="controls">
-            <div id="status" class="status">Initializing player...</div>
+        <div class="status">
+            <div id="info" class="info">Initializing player...</div>
+            <div id="error" class="error"></div>
         </div>
     </div>
 
     <script>
-        const proxyUrl = 'https://streamproxy-production.up.railway.app';
-        const streamPath = '/stream/CH2/tracks-v1a1/mono.m3u8';
-        const video = document.getElementById('videoPlayer');
-        const statusDiv = document.getElementById('status');
+        const video = document.getElementById('video');
+        const errorDisplay = document.getElementById('error');
+        const infoDisplay = document.getElementById('info');
         
-        function updateStatus(message, isError = false) {
-            statusDiv.textContent = message;
-            statusDiv.className = 'status ' + (isError ? 'error' : 'success');
+        function showError(message) {
+            console.error(message);
+            errorDisplay.textContent = message;
+            errorDisplay.style.display = 'block';
+        }
+
+        function showInfo(message) {
+            console.log(message);
+            infoDisplay.textContent = message;
         }
 
         function initPlayer() {
-            if (Hls.isSupported()) {
-                const hls = new Hls({
-                    debug: false,
-                    enableWorker: true,
-                    lowLatencyMode: true,
-                    backBufferLength: 90,
-                    maxBufferLength: 30,
-                    maxMaxBufferLength: 600,
-                    maxBufferSize: 60 * 1000 * 1000,
-                    maxBufferHole: 0.5,
-                    highBufferWatchdogPeriod: 2,
-                    nudgeOffset: 0.2,
-                    nudgeMaxRetry: 5,
-                    maxFragLookUpTolerance: 0.25,
-                    liveSyncDurationCount: 3,
-                    liveMaxLatencyDurationCount: 10,
-                    progressive: false,
-                    retryOnError: true,
-                    abrEwmaFastLive: 3.0,
-                    abrEwmaSlowLive: 9.0,
-                    startLevel: -1,
-                    manifestLoadingTimeOut: 10000,
-                    manifestLoadingMaxRetry: 4,
-                    manifestLoadingRetryDelay: 500,
-                    levelLoadingTimeOut: 10000,
-                    levelLoadingMaxRetry: 4,
-                    levelLoadingRetryDelay: 500,
-                    fragLoadingTimeOut: 20000,
-                    fragLoadingMaxRetry: 6,
-                    fragLoadingRetryDelay: 500,
-                });
-
-                // Bind player events
-                hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-                    updateStatus('Media attached, loading stream...');
-                });
-
-                hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                    updateStatus('Stream loaded successfully');
-                    video.play().catch(error => {
-                        updateStatus('Autoplay failed: ' + error.message, true);
-                    });
-                });
-
-                hls.on(Hls.Events.ERROR, (event, data) => {
-                    if (data.fatal) {
-                        switch (data.type) {
-                            case Hls.ErrorTypes.NETWORK_ERROR:
-                                updateStatus('Network error, attempting to recover...', true);
-                                hls.startLoad();
-                                break;
-                            case Hls.ErrorTypes.MEDIA_ERROR:
-                                updateStatus('Media error, attempting to recover...', true);
-                                hls.recoverMediaError();
-                                break;
-                            default:
-                                updateStatus('Fatal error: ' + data.details, true);
-                                hls.destroy();
-                                break;
-                        }
-                    }
-                });
-
-                const streamUrl = proxyUrl + streamPath;
-                updateStatus('Loading stream: ' + streamUrl);
-                hls.loadSource(streamUrl);
-                hls.attachMedia(video);
-
-                window.hls = hls; // Save for debugging
-            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                // For Safari
-                video.src = proxyUrl + streamPath;
-                video.addEventListener('loadedmetadata', () => {
-                    updateStatus('Stream loaded successfully (native HLS)');
-                    video.play().catch(error => {
-                        updateStatus('Autoplay failed: ' + error.message, true);
-                    });
-                });
-            } else {
-                updateStatus('HLS is not supported in your browser', true);
+            if (!Hls.isSupported()) {
+                showError('HLS is not supported in your browser');
+                return;
             }
+
+            const hls = new Hls({
+                debug: true,
+                enableWorker: true,
+                lowLatencyMode: true,
+                backBufferLength: 90,
+                maxBufferLength: 30,
+                maxMaxBufferLength: 60,
+                maxBufferSize: 60 * 1000 * 1000,
+                maxBufferHole: 0.5,
+                highBufferWatchdogPeriod: 2,
+                nudgeOffset: 0.2,
+                nudgeMaxRetry: 5,
+                maxFragLookUpTolerance: 0.25,
+                liveSyncDurationCount: 3,
+                liveMaxLatencyDurationCount: 10,
+                manifestLoadingTimeOut: 10000,
+                manifestLoadingMaxRetry: 4,
+                manifestLoadingRetryDelay: 500,
+                manifestLoadingMaxRetryTimeout: 64000,
+                startLevel: -1,
+                levelLoadingTimeOut: 10000,
+                levelLoadingMaxRetry: 4,
+                levelLoadingRetryDelay: 500,
+                levelLoadingMaxRetryTimeout: 64000
+            });
+
+            // Bind events
+            hls.on(Hls.Events.ERROR, function(event, data) {
+                if (data.fatal) {
+                    switch(data.type) {
+                        case Hls.ErrorTypes.NETWORK_ERROR:
+                            showError('Network error: ' + data.details);
+                            console.log('Trying to recover from network error...');
+                            hls.startLoad();
+                            break;
+                        case Hls.ErrorTypes.MEDIA_ERROR:
+                            showError('Media error: ' + data.details);
+                            console.log('Trying to recover from media error...');
+                            hls.recoverMediaError();
+                            break;
+                        default:
+                            showError('Fatal error: ' + data.type + ' - ' + data.details);
+                            hls.destroy();
+                            break;
+                    }
+                } else {
+                    console.warn('Non-fatal error:', data);
+                }
+            });
+
+            // Loading states
+            hls.on(Hls.Events.MANIFEST_LOADING, () => {
+                showInfo('Loading stream manifest...');
+            });
+
+            hls.on(Hls.Events.MANIFEST_LOADED, () => {
+                showInfo('Stream manifest loaded, starting playback...');
+            });
+
+            hls.on(Hls.Events.LEVEL_LOADED, () => {
+                showInfo('Stream loaded and playing');
+                errorDisplay.style.display = 'none';
+            });
+
+            // Load source
+            const streamUrl = '/stream/index.m3u8';
+            showInfo('Connecting to stream: ' + streamUrl);
+            
+            hls.loadSource(streamUrl);
+            hls.attachMedia(video);
+            
+            video.play().catch(e => {
+                showError('Playback error: ' + e.message);
+            });
         }
 
-        // Initialize player when page loads
-        document.addEventListener('DOMContentLoaded', initPlayer);
-
-        // Add error handling for video element
-        video.addEventListener('error', (e) => {
-            updateStatus('Video error: ' + (video.error ? video.error.message : 'Unknown error'), true);
-        });
-
-        // Add play/pause event listeners
-        video.addEventListener('playing', () => {
-            updateStatus('Stream is playing');
-        });
-
-        video.addEventListener('pause', () => {
-            updateStatus('Stream is paused');
-        });
-
-        video.addEventListener('waiting', () => {
-            updateStatus('Buffering...');
-        });
-
-        video.addEventListener('ended', () => {
-            updateStatus('Stream ended');
-        });
+        // Start player when page loads
+        window.addEventListener('load', initPlayer);
     </script>
 </body>
 </html>
