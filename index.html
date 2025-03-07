@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="referrer" content="no-referrer">
+    <title>Stream By Ishmam</title>
+    <script src="https://cdn.tailwindcss.com" defer></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <!-- HLS.js -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body {
+            background: #000;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .main-container {
+            width: 100%;
+            max-width: 1200px;
+            padding: 20px;
+            text-align: center;
+        }
+        .content-wrapper {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .video-container {
+            width: 100%;
+            background: #000;
+            position: relative;
+            aspect-ratio: 16/9;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin: 0 auto;
+        }
+        .title {
+            background: linear-gradient(to right, #00dbde, #fc00ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            font-weight: bold;
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            text-align: center;
+            display: block;
+            width: 100%;
+        }
+        .contact-container {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            width: 100%;
+        }
+        .contact {
+            color: rgba(255,255,255,0.9);
+            font-size: 1rem;
+            display: inline-block;
+        }
+        .social-link {
+            display: inline-flex;
+            align-items: center;
+            background: #1877f2;
+            color: white;
+            padding: 6px 16px;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            text-decoration: none;
+            margin-left: 8px;
+            transition: all 0.2s ease;
+        }
+        .social-link:hover {
+            background: #1664d9;
+            transform: translateY(-1px);
+        }
+        .social-link i {
+            margin-right: 6px;
+        }
+        #player {
+            width: 100%;
+            height: 100%;
+            border-radius: 12px;
+            background: #000;
+        }
+        .custom-controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .video-container:hover .custom-controls {
+            opacity: 1;
+        }
+        .control-button {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            padding: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+        .control-button:hover {
+            color: #00dbde;
+        }
+        .volume-slider {
+            width: 100px;
+            margin: 0 10px;
+            cursor: pointer;
+        }
+        .progress-bar {
+            flex-grow: 1;
+            height: 4px;
+            background: rgba(255,255,255,0.2);
+            position: relative;
+            cursor: pointer;
+            border-radius: 2px;
+        }
+        .progress-bar .loaded {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            background: rgba(255,255,255,0.4);
+            border-radius: 2px;
+        }
+        .progress-bar .played {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            background: #00dbde;
+            border-radius: 2px;
+        }
+        @media (max-width: 768px) {
+            body {
+                align-items: flex-start;
+            }
+            .main-container {
+                padding: 12px;
+            }
+            .content-wrapper {
+                width: 100%;
+            }
+            .title {
+                font-size: 1.5rem;
+                margin-bottom: 0.5rem;
+            }
+            .contact {
+                font-size: 0.9rem;
+            }
+            .social-link {
+                padding: 4px 12px;
+                font-size: 0.9rem;
+            }
+            .video-container {
+                border-radius: 8px;
+            }
+            #player {
+                border-radius: 8px;
+            }
+            .custom-controls {
+                padding: 8px;
+            }
+            .volume-slider {
+                width: 60px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="content-wrapper">
+            <h1 class="title">
+                Stream By Ishmam
+            </h1>
+            <div class="contact-container">
+                <span class="contact">Contact for updates</span>
+                <a href="https://www.facebook.com/ishmamr.1" target="_blank" class="social-link">
+                    <i class="fab fa-facebook-f"></i>
+                    <span>Facebook</span>
+                </a>
+            </div>
+
+            <div class="video-container">
+                <video id="player" controls playsinline></video>
+                <div class="custom-controls">
+                    <button class="control-button" id="playPauseBtn">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <div class="progress-bar" id="progressBar">
+                        <div class="loaded" id="loadedProgress"></div>
+                        <div class="played" id="playedProgress"></div>
+                    </div>
+                    <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="100">
+                    <button class="control-button" id="muteBtn">
+                        <i class="fas fa-volume-up"></i>
+                    </button>
+                    <button class="control-button" id="fullscreenBtn">
+                        <i class="fas fa-expand"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const streamUrl = 'http://localhost:3000/stream/CH2/tracks-v1a1/mono.m3u8';
+            let hlsEngine = null;
+
+            function initializePlayer() {
+                const video = document.getElementById('player');
+                video.muted = true; // Start muted to enable autoplay
+
+                if (Hls.isSupported()) {
+                    hlsEngine = new Hls({
+                        debug: true,
+                        enableWorker: false,
+                        backBufferLength: 90,
+                        liveBackBufferLength: 90,
+                        liveSyncDurationCount: 3,
+                        liveMaxLatencyDurationCount: 10,
+                        maxBufferLength: 30,
+                        maxBufferSize: 60 * 1000 * 1000,
+                        maxMaxBufferLength: 600,
+                        maxLoadingDelay: 4,
+                        manifestLoadingMaxRetry: 6,
+                        manifestLoadingRetryDelay: 1000,
+                        manifestLoadingTimeOut: 10000,
+                        levelLoadingMaxRetry: 6,
+                        levelLoadingRetryDelay: 1000,
+                        levelLoadingTimeOut: 10000,
+                        fragLoadingMaxRetry: 6,
+                        fragLoadingRetryDelay: 1000,
+                        fragLoadingTimeOut: 10000,
+                        startFragPrefetch: true,
+                        testBandwidth: false,
+                        progressive: false,
+                        lowLatencyMode: true,
+                        enableDateRangeMetadataFragment: true,
+                        abrEwmaDefaultEstimate: 1000000,
+                        abrEwmaFastLive: 3,
+                        abrEwmaSlowLive: 9,
+                        abrBandWidthFactor: 0.95,
+                        abrBandWidthUpFactor: 0.7,
+                        abrMaxWithRealBitrate: true,
+                        maxStarvationDelay: 4,
+                        maxLoadingDelay: 4,
+                        minAutoBitrate: 0,
+                        emeEnabled: true,
+                        enableWebVTT: true,
+                        enableIMSC1: true,
+                        enableCEA708Captions: true,
+                        stretchShortVideoTrack: false,
+                        maxAudioFramesDrift: 1,
+                        forceKeyFrameOnDiscontinuity: true,
+                        appendErrorMaxRetry: 3
+                    });
+
+                    // Add detailed error logging
+                    hlsEngine.on(Hls.Events.ERROR, function(event, data) {
+                        console.error('HLS Error:', {
+                            type: data.type,
+                            details: data.details,
+                            fatal: data.fatal,
+                            error: data.error
+                        });
+
+                        if (data.fatal) {
+                            switch(data.type) {
+                                case Hls.ErrorTypes.NETWORK_ERROR:
+                                    console.log('Network error, trying to recover');
+                                    hlsEngine.startLoad();
+                                    break;
+                                case Hls.ErrorTypes.MEDIA_ERROR:
+                                    console.log('Media error, trying to recover');
+                                    hlsEngine.recoverMediaError();
+                                    break;
+                                default:
+                                    console.log('Fatal error, reloading player');
+                                    destroyPlayer();
+                                    setTimeout(() => {
+                                        initializePlayer();
+                                    }, 1000);
+                                    break;
+                            }
+                        }
+                    });
+
+                    // Add more detailed event logging
+                    hlsEngine.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
+                        console.log('Manifest parsed:', {
+                            levels: data.levels.length,
+                            firstLevel: data.firstLevel,
+                            audioTracks: data.audioTracks.length
+                        });
+                    });
+
+                    hlsEngine.on(Hls.Events.LEVEL_LOADED, function(event, data) {
+                        console.log('Level loaded:', {
+                            level: data.level,
+                            fragments: data.details.fragments.length,
+                            live: data.details.live,
+                            targetDuration: data.details.targetduration
+                        });
+                    });
+
+                    hlsEngine.on(Hls.Events.FRAG_LOADED, function(event, data) {
+                        console.log('Fragment loaded:', {
+                            level: data.frag.level,
+                            sn: data.frag.sn,
+                            duration: data.frag.duration,
+                            start: data.frag.start
+                        });
+                    });
+
+                    // Try loading the main stream directly
+                    console.log('Loading stream:', streamUrl);
+                    hlsEngine.loadSource(streamUrl);
+                    hlsEngine.attachMedia(video);
+
+                    hlsEngine.on(Hls.Events.MANIFEST_PARSED, function() {
+                        console.log('Stream manifest loaded');
+                        video.play().catch(error => {
+                            console.log("Play prevented, retrying...");
+                            let playAttempt = setInterval(() => {
+                                video.play()
+                                    .then(() => {
+                                        clearInterval(playAttempt);
+                                        setTimeout(() => {
+                                            video.muted = false;
+                                        }, 1000);
+                                    })
+                                    .catch(() => console.log("Autoplay still prevented..."));
+                            }, 1000);
+                        });
+                    });
+
+                    // Monitor buffer state
+                    hlsEngine.on(Hls.Events.BUFFER_APPENDED, function(event, data) {
+                        if (video.buffered.length) {
+                            const loadedProgress = document.getElementById('loadedProgress');
+                            const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+                            const duration = video.duration || 0;
+                            if (duration > 0) {
+                                loadedProgress.style.width = ((bufferedEnd / duration) * 100) + '%';
+                            }
+                        }
+                    });
+
+                    // Monitor quality levels
+                    hlsEngine.on(Hls.Events.LEVEL_SWITCHED, function(event, data) {
+                        console.log('Quality level switched to:', data.level);
+                    });
+                }
+                // Fallback for Safari
+                else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    video.src = streamUrl;
+                }
+
+                // Set up custom controls
+                setupCustomControls();
+            }
+
+            function setupCustomControls() {
+                const video = document.getElementById('player');
+                const playPauseBtn = document.getElementById('playPauseBtn');
+                const volumeSlider = document.getElementById('volumeSlider');
+                const muteBtn = document.getElementById('muteBtn');
+                const fullscreenBtn = document.getElementById('fullscreenBtn');
+                const progressBar = document.getElementById('progressBar');
+                const loadedProgress = document.getElementById('loadedProgress');
+                const playedProgress = document.getElementById('playedProgress');
+
+                // Play/Pause
+                playPauseBtn.addEventListener('click', () => {
+                    if (video.paused) {
+                        video.play();
+                    } else {
+                        video.pause();
+                    }
+                });
+
+                // Volume
+                volumeSlider.addEventListener('input', () => {
+                    video.volume = volumeSlider.value / 100;
+                    updateMuteButton();
+                });
+
+                // Mute
+                muteBtn.addEventListener('click', () => {
+                    video.muted = !video.muted;
+                    updateMuteButton();
+                });
+
+                // Fullscreen
+                fullscreenBtn.addEventListener('click', () => {
+                    if (!document.fullscreenElement) {
+                        video.requestFullscreen();
+                    } else {
+                        document.exitFullscreen();
+                    }
+                });
+
+                // Progress bar
+                progressBar.addEventListener('click', (e) => {
+                    const rect = progressBar.getBoundingClientRect();
+                    const pos = (e.clientX - rect.left) / rect.width;
+                    video.currentTime = pos * video.duration;
+                });
+
+                // Update progress
+                video.addEventListener('timeupdate', () => {
+                    const played = (video.currentTime / video.duration) * 100;
+                    playedProgress.style.width = played + '%';
+                });
+
+                // Update play/pause button
+                video.addEventListener('play', () => {
+                    playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
+                });
+
+                video.addEventListener('pause', () => {
+                    playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+                });
+
+                // Update fullscreen button
+                document.addEventListener('fullscreenchange', () => {
+                    if (document.fullscreenElement) {
+                        fullscreenBtn.innerHTML = '<i class="fas fa-compress"></i>';
+                    } else {
+                        fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>';
+                    }
+                });
+
+                function updateMuteButton() {
+                    if (video.muted || video.volume === 0) {
+                        muteBtn.innerHTML = '<i class="fas fa-volume-mute"></i>';
+                    } else if (video.volume < 0.5) {
+                        muteBtn.innerHTML = '<i class="fas fa-volume-down"></i>';
+                    } else {
+                        muteBtn.innerHTML = '<i class="fas fa-volume-up"></i>';
+                    }
+                }
+            }
+
+            function destroyPlayer() {
+                if (hlsEngine) {
+                    hlsEngine.destroy();
+                    hlsEngine = null;
+                }
+            }
+
+            // Initialize player
+            initializePlayer();
+
+            // Handle visibility change
+            document.addEventListener('visibilitychange', function() {
+                const video = document.getElementById('player');
+                if (!document.hidden && video.paused) {
+                    video.play();
+                }
+            });
+
+            // Handle network state changes
+            window.addEventListener('online', () => {
+                console.log('Network online, attempting to resume...');
+                destroyPlayer();
+                initializePlayer();
+            });
+
+            window.addEventListener('offline', () => {
+                console.log('Network offline, waiting to reconnect...');
+            });
+
+            // Periodic check to ensure playback
+            setInterval(() => {
+                const video = document.getElementById('player');
+                if (video.paused && !video.seeking) {
+                    video.play();
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
