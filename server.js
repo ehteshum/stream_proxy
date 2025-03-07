@@ -4,19 +4,22 @@ const axios = require('axios');
 const http = require('http');
 const https = require('https');
 const { PassThrough } = require('stream');
-const config = require('./config');
 
 const app = express();
-const port = process.env.PORT || 3000;
 
-// Log environment variables (excluding sensitive data)
-console.log('Environment:', {
-    NODE_ENV: process.env.NODE_ENV,
-    PORT: process.env.PORT,
-    IS_PRODUCTION: process.env.NODE_ENV === 'production'
+// Basic configuration
+const PORT = process.env.PORT || 3000;
+const STREAM_URL = process.env.STREAM_URL || 'http://kst.moonplex.net:8080';
+const NODE_ENV = process.env.NODE_ENV || 'development';
+
+// Log startup configuration
+console.log('Starting server with config:', {
+    port: PORT,
+    environment: NODE_ENV,
+    streamUrl: STREAM_URL
 });
 
-// Create custom axios instance with keep-alive
+// Create axios instance
 const axiosInstance = axios.create({
     httpAgent: new http.Agent({ keepAlive: true }),
     httpsAgent: new https.Agent({ keepAlive: true }),
@@ -24,131 +27,82 @@ const axiosInstance = axios.create({
     maxRedirects: 5
 });
 
-// Enable CORS
-app.use(cors(config.cors));
+// CORS configuration
+app.use(cors());
 
 // Serve static files
-app.use(express.static('.'));
+app.use(express.static(__dirname));
 
-// Cache for m3u8 manifests
-const manifestCache = new Map();
-const MANIFEST_CACHE_TIME = config.nodeEnv === 'production' ? 500 : 1000;
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        config: {
+            port: PORT,
+            env: NODE_ENV
+        }
+    });
+});
 
-// Stream the response
-function streamResponse(response, res) {
-    const stream = new PassThrough();
-    response.data.pipe(stream);
-    stream.pipe(res);
-}
-
-// Custom middleware for HLS streaming
-app.use('/stream', async (req, res, next) => {
-    const targetUrl = `${config.streamUrl}${req.path}`;
+// Stream proxy endpoint
+app.use('/stream', async (req, res) => {
+    const targetUrl = `${STREAM_URL}${req.path}`;
     const isM3U8 = req.path.endsWith('.m3u8');
     const isTS = req.path.endsWith('.ts');
 
     if (!isM3U8 && !isTS) {
-        return next();
+        return res.status(400).send('Invalid request');
     }
 
-    // Set common headers
-    res.set(config.cors);
-
     try {
-        if (isM3U8) {
-            // Check cache for manifest
-            const cachedManifest = manifestCache.get(req.path);
-            if (cachedManifest && Date.now() - cachedManifest.timestamp < MANIFEST_CACHE_TIME) {
-                console.log('Serving cached manifest');
-                res.set('Content-Type', 'application/vnd.apple.mpegurl');
-                return res.send(cachedManifest.content);
+        console.log(`Fetching ${isM3U8 ? 'manifest' : 'segment'} from:`, targetUrl);
+        
+        const response = await axiosInstance({
+            method: 'get',
+            url: targetUrl,
+            responseType: isM3U8 ? 'text' : 'stream',
+            headers: {
+                'Accept': '*/*',
+                'User-Agent': 'Mozilla/5.0'
             }
+        });
 
-            // Fetch new manifest
-            console.log('Fetching manifest from:', targetUrl);
-            const response = await axiosInstance({
-                method: 'get',
-                url: targetUrl,
-                responseType: 'text',
-                headers: {
-                    'Accept': '*/*',
-                    'User-Agent': 'Mozilla/5.0'
-                }
-            });
+        // Set appropriate headers
+        res.set('Access-Control-Allow-Origin', '*');
+        res.set('Content-Type', isM3U8 ? 'application/vnd.apple.mpegurl' : 'video/MP2T');
 
-            // Validate and process manifest
-            const manifest = response.data;
-            if (!manifest.includes('#EXTM3U')) {
+        if (isM3U8) {
+            // Validate M3U8 content
+            if (!response.data.includes('#EXTM3U')) {
                 throw new Error('Invalid M3U8 content');
             }
-
-            // Cache manifest
-            manifestCache.set(req.path, {
-                content: manifest,
-                timestamp: Date.now()
-            });
-
-            // Send response
-            res.set('Content-Type', 'application/vnd.apple.mpegurl');
-            res.send(manifest);
+            res.send(response.data);
         } else {
-            // Handle TS segment
-            console.log('Fetching segment:', targetUrl);
-            const response = await axiosInstance({
-                method: 'get',
-                url: targetUrl,
-                responseType: 'stream',
-                headers: {
-                    'Accept': '*/*',
-                    'User-Agent': 'Mozilla/5.0'
-                }
-            });
-
-            // Set segment-specific headers
-            res.set('Content-Type', 'video/MP2T');
-            res.set('Cache-Control', 'public, max-age=0');
-
-            // Stream the response
-            streamResponse(response, res);
+            // Stream TS segments
+            response.data.pipe(res);
         }
     } catch (error) {
-        console.error('Streaming error:', error.message, error.stack);
-        if (!res.headersSent) {
-            res.status(502).send('Error fetching stream content');
-        }
+        console.error('Proxy error:', error.message);
+        res.status(502).send('Error fetching content');
     }
 });
 
-// Serve index.html for root path
+// Root endpoint
 app.get('/', (req, res) => {
     res.sendFile('index.html', { root: __dirname });
 });
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-    res.status(200).json({ 
-        status: 'ok', 
-        environment: config.nodeEnv,
-        port: port,
-        env_port: process.env.PORT,
-        timestamp: new Date().toISOString()
-    });
-});
-
-// Error handling
+// Error handler
 app.use((err, req, res, next) => {
     console.error('Server error:', err);
-    if (!res.headersSent) {
-        res.status(500).send('Server error');
-    }
+    res.status(500).send('Server error');
 });
 
 // Start server
-const server = app.listen(port, '0.0.0.0', () => {
-    console.log(`Server starting with configuration:`, {
-        port: port,
-        env_port: process.env.PORT,
-        node_env: process.env.NODE_ENV,
-        address: server.address()
-    });
+const server = http.createServer(app);
+
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT} in ${NODE_ENV} mode`);
+    console.log(`Health check: http://localhost:${PORT}/health`);
 });
