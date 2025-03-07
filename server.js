@@ -5,16 +5,6 @@ const http = require('http');
 const https = require('https');
 const { PassThrough } = require('stream');
 const config = require('./config');
-const winston = require('winston');
-
-// Create logger
-const logger = winston.createLogger({
-    level: config.nodeEnv === 'production' ? 'info' : 'debug',
-    format: winston.format.json(),
-    transports: [
-        new winston.transports.Console()
-    ]
-});
 
 const app = express();
 
@@ -34,7 +24,7 @@ app.use(express.static('.'));
 
 // Cache for m3u8 manifests
 const manifestCache = new Map();
-const MANIFEST_CACHE_TIME = config.nodeEnv === 'production' ? 500 : 1000; // Shorter cache time in production
+const MANIFEST_CACHE_TIME = config.nodeEnv === 'production' ? 500 : 1000;
 
 // Stream the response
 function streamResponse(response, res) {
@@ -61,13 +51,13 @@ app.use('/stream', async (req, res, next) => {
             // Check cache for manifest
             const cachedManifest = manifestCache.get(req.path);
             if (cachedManifest && Date.now() - cachedManifest.timestamp < MANIFEST_CACHE_TIME) {
-                logger.info('Serving cached manifest');
+                console.log('Serving cached manifest');
                 res.set('Content-Type', 'application/vnd.apple.mpegurl');
                 return res.send(cachedManifest.content);
             }
 
             // Fetch new manifest
-            logger.info('Fetching new manifest');
+            console.log('Fetching manifest from:', targetUrl);
             const response = await axiosInstance({
                 method: 'get',
                 url: targetUrl,
@@ -95,7 +85,7 @@ app.use('/stream', async (req, res, next) => {
             res.send(manifest);
         } else {
             // Handle TS segment
-            logger.info('Fetching segment:', req.path);
+            console.log('Fetching segment:', targetUrl);
             const response = await axiosInstance({
                 method: 'get',
                 url: targetUrl,
@@ -114,56 +104,37 @@ app.use('/stream', async (req, res, next) => {
             streamResponse(response, res);
         }
     } catch (error) {
-        logger.error('Streaming error:', error.message);
+        console.error('Streaming error:', error.message, error.stack);
         if (!res.headersSent) {
             res.status(502).send('Error fetching stream content');
         }
     }
 });
 
+// Serve index.html for root path
+app.get('/', (req, res) => {
+    res.sendFile('index.html', { root: __dirname });
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok', environment: config.nodeEnv });
+    res.status(200).json({ 
+        status: 'ok', 
+        environment: config.nodeEnv,
+        timestamp: new Date().toISOString()
+    });
 });
 
 // Error handling
 app.use((err, req, res, next) => {
-    logger.error('Server error:', err);
+    console.error('Server error:', err);
     if (!res.headersSent) {
         res.status(500).send('Server error');
     }
 });
 
-// Start server with error handling
-const server = app.listen(config.port, () => {
-    logger.info(`Server running in ${config.nodeEnv} mode at http://localhost:${config.port}`);
-});
-
-// Handle server errors
-server.on('error', (error) => {
-    if (error.syscall !== 'listen') {
-        throw error;
-    }
-
-    switch (error.code) {
-        case 'EACCES':
-            logger.error(`Port ${config.port} requires elevated privileges`);
-            process.exit(1);
-            break;
-        case 'EADDRINUSE':
-            logger.error(`Port ${config.port} is already in use`);
-            process.exit(1);
-            break;
-        default:
-            throw error;
-    }
-});
-
-// Handle process termination
-process.on('SIGTERM', () => {
-    logger.info('SIGTERM signal received. Closing server...');
-    server.close(() => {
-        logger.info('Server closed');
-        process.exit(0);
-    });
+// Start server
+const port = process.env.PORT || config.port;
+const server = app.listen(port, '0.0.0.0', () => {
+    console.log(`Server running in ${config.nodeEnv} mode at http://localhost:${port}`);
 });
