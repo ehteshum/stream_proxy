@@ -6,6 +6,7 @@ const https = require('https');
 const { PassThrough } = require('stream');
 const config = require('./config');
 
+const port = process.env.PORT || 3000; // Railway will set PORT env variable
 const app = express();
 
 // Create custom axios instance with keep-alive
@@ -121,6 +122,7 @@ app.get('/health', (req, res) => {
     res.status(200).json({ 
         status: 'ok', 
         environment: config.nodeEnv,
+        port: port,
         timestamp: new Date().toISOString()
     });
 });
@@ -134,7 +136,6 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-const port = process.env.PORT || config.port;
-const server = app.listen(port, '0.0.0.0', () => {
-    console.log(`Server running in ${config.nodeEnv} mode at http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+    console.log(`Server running in ${config.nodeEnv} mode on port ${port}`);
 });
